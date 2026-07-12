@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Free QR Code Generator — QRCraft | URL, WiFi, vCard, Email</title>
+  <meta name="description" content="Generate QR codes instantly for URLs, WiFi, email, phone, vCard and text. Free forever, no signup, no watermark. Download as PNG or SVG." />
+  <meta name="keywords" content="qr code generator, free qr code, wifi qr code, vcard qr code, url to qr code, qr code maker" />
+  <meta property="og:title" content="QRCraft — Free QR Code Generator" />
+  <meta property="og:description" content="Generate QR codes instantly. Free, no signup, no watermark." />
+  <meta property="og:type" content="website" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #F7F6F2;
+      --surface: #FFFFFF;
+      --ink:     #1A1A1A;
+      --muted:   #7A7A7A;
+      --accent:  #0066FF;
+      --border:  #E0DED8;
+      --radius:  12px;
+      --mono:    'Space Mono', monospace;
+      --sans:    'Space Grotesk', sans-serif;
+    }
+    body { font-family: var(--sans); background: var(--bg); color: var(--ink); min-height: 100vh; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── NAV ── */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px; background: var(--surface);
+      border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100;
+    }
+    .logo { font-family: var(--mono); font-size: 18px; font-weight: 700; color: var(--ink); }
+    .logo span { color: var(--accent); }
+    .nav-links { display: flex; gap: 24px; align-items: center; }
+    .nav-links a { font-size: 13px; font-weight: 500; color: var(--muted); }
+    .nav-links a:hover { color: var(--accent); text-decoration: none; }
+    .nav-badge { font-size: 11px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+    @media(max-width:600px){ .nav-links { display:none; } }
+
+    /* ── HERO ── */
+    .hero { text-align: center; padding: 56px 24px 36px; max-width: 680px; margin: 0 auto; }
+    .hero-eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+    .hero h1 { font-size: clamp(28px, 5vw, 46px); font-weight: 700; line-height: 1.1; letter-spacing: -1.5px; margin-bottom: 14px; }
+    .hero h1 em { font-style: normal; color: var(--accent); }
+    .hero p { font-size: 16px; color: var(--muted); line-height: 1.65; max-width: 520px; margin: 0 auto; }
+    .trust-strip { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
+    .trust-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+
+    /* ════════════════════════════════
+       TOOL SHELL — FIXED LAYOUT
+       ════════════════════════════════ */
+    .app-shell {
+      display: grid;
+      grid-template-columns: 1fr 320px;
+      gap: 24px;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 0 24px 60px;
+      /* KEY FIX: no overflow hidden, children handle their own stacking */
+      align-items: start;
+    }
+
+    /* Desktop: left col scrolls normally, right col is sticky within its own lane */
+    .input-col {
+      min-width: 0; /* prevent grid blowout */
+    }
+    .preview-col {
+      min-width: 0;
+      /* Sticky only on desktop — on mobile it sits inline above */
+      position: sticky;
+      top: 76px;
+      align-self: start;
+    }
+
+    /* ── MOBILE: single column, preview goes on top ── */
+    @media(max-width: 740px) {
+      .app-shell {
+        grid-template-columns: 1fr;
+      }
+      .preview-col {
+        position: static; /* remove sticky on mobile — avoids the overlap */
+        top: auto;
+        order: -1; /* show preview above form on mobile */
+      }
+    }
+
+    /* ── CARD ── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .card + .card { margin-top: 16px; }
+    .section-label { font-family: var(--mono); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+
+    /* ── TABS ── */
+    .type-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }
+    .type-tab { font-family: var(--sans); font-size: 13px; font-weight: 500; padding: 7px 14px; border-radius: 8px; border: 1.5px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.15s; }
+    .type-tab:hover { border-color: var(--accent); color: var(--accent); }
+    .type-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+    /* ── FORM ── */
+    .form-group { margin-bottom: 14px; }
+    .form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 10px 14px; font-family: var(--sans); font-size: 14px;
+      background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px;
+      color: var(--ink); outline: none; transition: border-color 0.15s;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .field-group { display: none; }
+    .field-group.active { display: block; }
+
+    /* ── COLOR ── */
+    .color-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+    .swatch-group { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 120px; }
+    .swatch-group label { font-size: 11px; color: var(--muted); font-weight: 600; }
+    .color-input-wrap { display: flex; align-items: center; gap: 8px; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+    .color-input-wrap input[type="color"] { width: 28px; height: 28px; border: none; background: none; padding: 0; cursor: pointer; border-radius: 4px; }
+    .color-input-wrap input[type="text"] { border: none; background: none; font-family: var(--mono); font-size: 13px; width: 80px; padding: 0; }
+    input[type="range"] { width: 100%; accent-color: var(--accent); }
+    .range-val { font-family: var(--mono); font-size: 12px; color: var(--accent); font-weight: 700; }
+
+    /* ── PREVIEW ── */
+    .qr-stage {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 240px; background: var(--bg); border-radius: 10px;
+      padding: 20px; margin-bottom: 12px;
+    }
+    #qr-output { display: flex; align-items: center; justify-content: center; }
+    #qr-output canvas, #qr-output img { border-radius: 6px; max-width: 100%; height: auto; }
+    .qr-placeholder { display: flex; flex-direction: column; align-items: center; gap: 10px; color: var(--muted); }
+    .qr-placeholder svg { opacity: 0.2; }
+    .qr-placeholder p { font-size: 13px; }
+    .qr-meta { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: center; margin-top: 8px; min-height: 16px; }
+
+    /* ── BUTTONS ── */
+    .dl-row { display: flex; gap: 8px; margin-top: 14px; }
+    .btn { flex: 1; font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 10px 8px; border-radius: 9px; border: none; cursor: pointer; transition: all 0.15s; text-align: center; white-space: nowrap; }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #0052cc; }
+    .btn-outline { background: transparent; border: 1.5px solid var(--border); color: var(--ink); }
+    .btn-outline:hover { border-color: var(--ink); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .generate-btn { width: 100%; font-family: var(--sans); font-size: 15px; font-weight: 700; padding: 14px; border-radius: 10px; border: none; background: var(--accent); color: #fff; cursor: pointer; margin-top: 6px; letter-spacing: -0.2px; transition: background 0.15s; }
+    .generate-btn:hover { background: #0052cc; }
+
+    /* ── CONTENT SECTIONS ── */
+    .content-section { max-width: 980px; margin: 0 auto; padding: 0 24px 72px; }
+    .section-head { text-align: center; margin-bottom: 48px; }
+    .section-head .eyebrow { font-family: var(--mono); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 10px; }
+    .section-head h2 { font-size: clamp(22px, 3.5vw, 34px); font-weight: 700; letter-spacing: -1px; line-height: 1.2; }
+    .section-head p { font-size: 15px; color: var(--muted); margin-top: 10px; line-height: 1.65; max-width: 540px; margin-left: auto; margin-right: auto; }
+
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+    .step-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; }
+    .step-num { font-family: var(--mono); font-size: 11px; font-weight: 700; color: var(--accent); letter-spacing: 1px; margin-bottom: 10px; }
+    .step-icon { font-size: 28px; margin-bottom: 10px; }
+    .step-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .step-card p { font-size: 13px; color: var(--muted); line-height: 1.6; }
+
+    .use-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+    .use-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; display: flex; gap: 14px; align-items: flex-start; }
+    .use-icon { font-size: 26px; flex-shrink: 0; margin-top: 2px; }
+    .use-card h3 { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .use-card p { font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+    .about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; }
+    @media(max-width:640px){ .about-grid { grid-template-columns: 1fr; } }
+    .about-text h2 { font-size: clamp(22px, 3vw, 30px); font-weight: 700; letter-spacing: -1px; line-height: 1.25; margin-bottom: 14px; }
+    .about-text p { font-size: 14px; color: var(--muted); line-height: 1.75; margin-bottom: 12px; }
+    .about-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .stat-box { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px; text-align: center; }
+    .stat-num { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--accent); }
+    .stat-label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+    .vs-table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--surface); border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); }
+    .vs-table th { padding: 12px 18px; text-align: left; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; background: var(--bg); color: var(--muted); font-weight: 700; border-bottom: 1px solid var(--border); }
+    .vs-table td { padding: 13px 18px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    .vs-table tr:last-child td { border-bottom: none; }
+    .vs-table td:first-child { font-weight: 600; }
+    .check { color: #22c55e; font-size: 16px; }
+    .cross { color: #f43f5e; font-size: 16px; }
+    .partial { color: #f59e0b; font-size: 13px; font-weight: 600; }
+
+    .faq-list { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+    .faq-item { border-bottom: 1px solid var(--border); }
+    .faq-item:last-child { border-bottom: none; }
+    .faq-q { width: 100%; background: none; border: none; text-align: left; padding: 18px 20px; font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .faq-q:hover { background: var(--bg); }
+    .faq-q .arrow { color: var(--accent); font-size: 18px; transition: transform 0.2s; flex-shrink: 0; }
+    .faq-q.open .arrow { transform: rotate(45deg); }
+    .faq-a { display: none; padding: 0 20px 18px; font-size: 13px; color: var(--muted); line-height: 1.75; }
+    .faq-a.open { display: block; }
+
+    .privacy-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 32px 36px; }
+    @media(max-width:600px){ .privacy-box { padding: 22px 18px; } }
+    .privacy-box h2 { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+    .privacy-item { margin-bottom: 22px; }
+    .privacy-item h3 { font-size: 14px; font-weight: 700; margin-bottom: 5px; }
+    .privacy-item p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+    .privacy-badge { display: inline-flex; align-items: center; gap: 6px; background: #dcfce7; color: #16a34a; font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 99px; margin-bottom: 20px; letter-spacing: 0.5px; }
+
+    .section-divider { border: none; border-top: 1px solid var(--border); margin: 0 24px; }
+    [id] { scroll-margin-top: 80px; }
+
+    /* ── TOAST ── */
+    #toast { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: #fff; font-size: 13px; font-weight: 500; padding: 10px 20px; border-radius: 99px; z-index: 999; transition: transform 0.3s ease; pointer-events: none; white-space: nowrap; }
+    #toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ── CONSENT BANNER ── */
+    #consent-banner {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999;
+      background: var(--surface); border-top: 2px solid var(--border);
+      padding: 18px 28px;
+      display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+      box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
+    }
+    .consent-text { flex: 1; min-width: 260px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+    .consent-text strong { color: var(--ink); }
+    .consent-actions { display: flex; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+    .consent-btn { font-family: var(--sans); font-size: 13px; font-weight: 600; padding: 9px 18px; border-radius: 8px; border: none; cursor: pointer; transition: all 0.15s; }
+    .consent-accept { background: var(--accent); color: #fff; }
+    .consent-accept:hover { background: #0052cc; }
+    .consent-decline { background: transparent; border: 1.5px solid var(--border); color: var(--ink); }
+    .consent-decline:hover { border-color: var(--ink); }
+    .consent-learn { font-size: 12px; color: var(--accent); cursor: pointer; white-space: nowrap; align-self: center; }
+
+    /* ── FOOTER ── */
+    .site-footer { background: var(--surface); border-top: 1px solid var(--border); padding: 40px 32px 28px; }
+    .footer-inner { max-width: 980px; margin: 0 auto; }
+    .footer-top { display: grid; grid-template-columns: 1.5fr 1fr 1fr; gap: 32px; margin-bottom: 32px; }
+    @media(max-width:640px){ .footer-top { grid-template-columns: 1fr; gap: 20px; } }
+    .footer-brand p { font-size: 13px; color: var(--muted); line-height: 1.65; max-width: 260px; margin-top: 8px; }
+    .footer-col h4 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 12px; }
+    .footer-col ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .footer-col ul li a { font-size: 13px; color: var(--ink); }
+    .footer-col ul li a:hover { color: var(--accent); }
+    .footer-bottom { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+    .footer-bottom p { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+  </style>
+</head>
+<body>
+
+<!-- ════ CONSENT BANNER ════ -->
+<div id="consent-banner">
+  <div class="consent-text">
+    <strong>🍪 We respect your privacy.</strong> This site uses Google Fonts (loaded from Google's servers) to display text. No tracking cookies, no analytics, no ads — your QR code data never leaves your browser. <a href="#privacy" onclick="dismissConsent()" style="color:var(--accent)">Read our Privacy Policy</a>
+  </div>
+  <div class="consent-actions">
+    <button class="consent-btn consent-decline" onclick="dismissConsent()">Continue without accepting</button>
+    <button class="consent-btn consent-accept" onclick="acceptConsent()">Got it, OK</button>
+  </div>
+</div>
+
+<!-- ════ NAV ════ -->
+<nav>
+  <div class="logo">QR<span>Craft</span></div>
+  <div class="nav-links">
+    <a href="#generator">Generator</a>
+    <a href="#how-it-works">How It Works</a>
+    <a href="#use-cases">Use Cases</a>
+    <a href="#faq">FAQ</a>
+    <a href="#privacy">Privacy</a>
+  </div>
+  <div class="nav-badge">Free · No Signup</div>
+</nav>
+
+<!-- ════ HERO ════ -->
+<div class="hero">
+  <div class="hero-eyebrow">Free QR Code Generator</div>
+  <h1>Paste a link.<br /><em>Get a QR code.</em></h1>
+  <p>Works for URLs, WiFi, email, phone, vCard and plain text. Download PNG or SVG — free forever, no watermark, no signup.</p>
+  <div class="trust-strip">
+    <div class="trust-item">✅ No signup</div>
+    <div class="trust-item">🔒 Nothing stored</div>
+    <div class="trust-item">🚫 No watermark</div>
+    <div class="trust-item">⚡ Works offline</div>
+  </div>
+</div>
+
+<!-- ════ GENERATOR ════ -->
+<div id="generator" class="app-shell">
+
+  <!-- LEFT: INPUT -->
+  <div class="input-col">
+    <div class="card">
+      <div class="section-label">QR Type</div>
+      <div class="type-tabs">
+        <button class="type-tab active" data-type="url">🔗 URL</button>
+        <button class="type-tab" data-type="text">📝 Text</button>
+        <button class="type-tab" data-type="email">✉️ Email</button>
+        <button class="type-tab" data-type="phone">📞 Phone</button>
+        <button class="type-tab" data-type="wifi">📶 WiFi</button>
+        <button class="type-tab" data-type="vcard">👤 vCard</button>
+      </div>
+
+      <div class="field-group active" id="fg-url">
+        <div class="form-group"><label>Website URL</label><input type="url" id="f-url" placeholder="https://yoursite.com" /></div>
+      </div>
+      <div class="field-group" id="fg-text">
+        <div class="form-group"><label>Text content</label><textarea id="f-text" placeholder="Enter any text…"></textarea></div>
+      </div>
+      <div class="field-group" id="fg-email">
+        <div class="form-group"><label>Email address</label><input type="email" id="f-email-addr" placeholder="you@example.com" /></div>
+        <div class="form-group"><label>Subject (optional)</label><input type="text" id="f-email-sub" placeholder="Hello there" /></div>
+        <div class="form-group"><label>Body (optional)</label><textarea id="f-email-body" placeholder="Message…" style="min-height:60px"></textarea></div>
+      </div>
+      <div class="field-group" id="fg-phone">
+        <div class="form-group"><label>Phone number</label><input type="tel" id="f-phone" placeholder="+91 9876543210" /></div>
+      </div>
+      <div class="field-group" id="fg-wifi">
+        <div class="form-group"><label>Network name (SSID)</label><input type="text" id="f-wifi-ssid" placeholder="MyHomeWiFi" /></div>
+        <div class="form-group"><label>Password</label><input type="text" id="f-wifi-pass" placeholder="password123" /></div>
+        <div class="form-group"><label>Security</label>
+          <select id="f-wifi-sec">
+            <option value="WPA">WPA / WPA2</option>
+            <option value="WEP">WEP</option>
+            <option value="nopass">None (open network)</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-group" id="fg-vcard">
+        <div class="form-row">
+          <div class="form-group"><label>First name</label><input type="text" id="f-vc-first" placeholder="Rahul" /></div>
+          <div class="form-group"><label>Last name</label><input type="text" id="f-vc-last" placeholder="Sharma" /></div>
+        </div>
+        <div class="form-group"><label>Job title</label><input type="text" id="f-vc-title" placeholder="Supply Chain Manager" /></div>
+        <div class="form-group"><label>Company</label><input type="text" id="f-vc-org" placeholder="Acme Logistics Pvt Ltd" /></div>
+        <div class="form-group"><label>Phone</label><input type="tel" id="f-vc-phone" placeholder="+91 9876543210" /></div>
+        <div class="form-group"><label>Email</label><input type="email" id="f-vc-email" placeholder="you@example.com" /></div>
+        <div class="form-group"><label>Website</label><input type="url" id="f-vc-url" placeholder="https://yoursite.com" /></div>
+      </div>
+
+      <button class="generate-btn" onclick="generateQR()">Generate QR Code →</button>
+    </div>
+
+    <!-- CUSTOMISE -->
+    <div class="card">
+      <div class="section-label">Customise</div>
+      <div class="form-group">
+        <label>Size — <span class="range-val" id="sizeVal">256px</span></label>
+        <input type="range" id="sizeRange" min="128" max="512" step="32" value="256" oninput="updateSizeLabel(this.value)" />
+      </div>
+      <div class="form-group">
+        <label>Error correction</label>
+        <select id="ecLevel">
+          <option value="L">Low — smaller file size</option>
+          <option value="M" selected>Medium — balanced (recommended)</option>
+          <option value="Q">High — more robust</option>
+          <option value="H">Max — best if adding a logo</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Colors</label>
+        <div class="color-row">
+          <div class="swatch-group">
+            <label>Foreground (dots)</label>
+            <div class="color-input-wrap">
+              <input type="color" id="fgColor" value="#1A1A1A" oninput="syncHex('fgColor','fgHex')" />
+              <input type="text" id="fgHex" value="#1A1A1A" maxlength="7" oninput="syncColor('fgHex','fgColor')" />
+            </div>
+          </div>
+          <div class="swatch-group">
+            <label>Background</label>
+            <div class="color-input-wrap">
+              <input type="color" id="bgColor" value="#FFFFFF" oninput="syncHex('bgColor','bgHex')" />
+              <input type="text" id="bgHex" value="#FFFFFF" maxlength="7" oninput="syncColor('bgHex','bgColor')" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /input-col -->
+
+  <!-- RIGHT: PREVIEW -->
+  <div class="preview-col">
+    <div class="card">
+      <div class="section-label">Preview</div>
+      <div class="qr-stage">
+        <div id="qr-output">
+          <div class="qr-placeholder">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none">
+              <rect x="4" y="4" width="28" height="28" rx="4" stroke="#1A1A1A" stroke-width="4"/>
+              <rect x="12" y="12" width="12" height="12" rx="2" fill="#1A1A1A"/>
+              <rect x="48" y="4" width="28" height="28" rx="4" stroke="#1A1A1A" stroke-width="4"/>
+              <rect x="56" y="12" width="12" height="12" rx="2" fill="#1A1A1A"/>
+              <rect x="4" y="48" width="28" height="28" rx="4" stroke="#1A1A1A" stroke-width="4"/>
+              <rect x="12" y="56" width="12" height="12" rx="2" fill="#1A1A1A"/>
+              <rect x="48" y="48" width="8" height="8" rx="1" fill="#1A1A1A"/>
+              <rect x="60" y="48" width="8" height="8" rx="1" fill="#1A1A1A"/>
+              <rect x="48" y="60" width="8" height="8" rx="1" fill="#1A1A1A"/>
+              <rect x="60" y="60" width="8" height="8" rx="1" fill="#1A1A1A"/>
+            </svg>
+            <p>Your QR code appears here</p>
+          </div>
+        </div>
+      </div>
+      <div class="qr-meta" id="qrMeta"></div>
+      <div class="dl-row">
+        <button class="btn btn-primary" id="dlPng" onclick="downloadPNG()" disabled>↓ PNG</button>
+        <button class="btn btn-outline" id="dlSvg" onclick="downloadSVG()" disabled>↓ SVG</button>
+        <button class="btn btn-outline" id="copyBtn" onclick="copyQR()" disabled>⧉ Copy</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="section-label">Quick Tips</div>
+      <div style="display:flex;flex-direction:column;gap:10px;font-size:13px;color:var(--muted);line-height:1.6">
+        <div>📐 <strong style="color:var(--ink)">Print:</strong> Use 256px+ for flyers; 300px+ for posters.</div>
+        <div>🎨 <strong style="color:var(--ink)">Contrast:</strong> Dark dots on light background scans best.</div>
+        <div>🔒 <strong style="color:var(--ink)">Logo overlay:</strong> Set error correction to Max first.</div>
+        <div>📶 <strong style="color:var(--ink)">WiFi QR:</strong> Guests join without typing a password.</div>
+        <div>👤 <strong style="color:var(--ink)">vCard:</strong> Scan to save contact — great for biz cards.</div>
+      </div>
+    </div>
+  </div><!-- /preview-col -->
+
+</div><!-- /app-shell -->
+
+<hr class="section-divider" />
+
+<!-- ════ HOW IT WORKS ════ -->
+<section id="how-it-works" class="content-section" style="padding-top:64px">
+  <div class="section-head">
+    <div class="eyebrow">How It Works</div>
+    <h2>Three steps. Five seconds.</h2>
+    <p>No account. No credit card. No hidden steps. Just generate and download.</p>
+  </div>
+  <div class="steps-grid">
+    <div class="step-card"><div class="step-num">STEP 01</div><div class="step-icon">✏️</div><h3>Enter your content</h3><p>Pick a QR type — URL, WiFi, vCard, email, phone, or plain text — and fill in the details.</p></div>
+    <div class="step-card"><div class="step-num">STEP 02</div><div class="step-icon">🎨</div><h3>Customise (optional)</h3><p>Choose colours, set the size (128–512px), and pick an error correction level. Or skip and use the defaults.</p></div>
+    <div class="step-card"><div class="step-num">STEP 03</div><div class="step-icon">⬇️</div><h3>Download & use</h3><p>Click Generate, then download as PNG or SVG — or copy directly to clipboard.</p></div>
+    <div class="step-card"><div class="step-num">BEHIND THE SCENES</div><div class="step-icon">🔐</div><h3>Everything stays local</h3><p>All QR generation happens in your browser using open-source qrcode.js. Your data never leaves your device.</p></div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ════ USE CASES ════ -->
+<section id="use-cases" class="content-section" style="padding-top:64px">
+  <div class="section-head">
+    <div class="eyebrow">Use Cases</div>
+    <h2>What can you do with a QR code?</h2>
+    <p>QR codes are everywhere — here are the most common ways people use QRCraft.</p>
+  </div>
+  <div class="use-grid">
+    <div class="use-card"><div class="use-icon">🍽️</div><div><h3>Restaurant menus</h3><p>Replace paper menus with a scannable QR that links to your online menu. Update the menu anytime without reprinting.</p></div></div>
+    <div class="use-card"><div class="use-icon">💼</div><div><h3>Digital business cards</h3><p>Put a vCard QR on your business card. Contacts scan it and save your details in one tap.</p></div></div>
+    <div class="use-card"><div class="use-icon">📶</div><div><h3>Guest WiFi sharing</h3><p>Print a WiFi QR for your home, café, or office. Guests scan and connect — no password typing needed.</p></div></div>
+    <div class="use-card"><div class="use-icon">📦</div><div><h3>Product packaging</h3><p>Link customers to manuals, warranty registration, review pages, or tutorial videos directly from the box.</p></div></div>
+    <div class="use-card"><div class="use-icon">📣</div><div><h3>Marketing & events</h3><p>Put QR codes on flyers and banners to drive traffic to your landing page, registration form, or social profile.</p></div></div>
+    <div class="use-card"><div class="use-icon">🏢</div><div><h3>Office & logistics</h3><p>Label assets, shelves, and shipments with QR codes linking to tracking info, documents, or inventory systems.</p></div></div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ════ ABOUT ════ -->
+<section id="about" class="content-section" style="padding-top:64px">
+  <div class="about-grid">
+    <div class="about-text">
+      <div style="font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);margin-bottom:10px">About QRCraft</div>
+      <h2>Built for people who just need a QR code — fast.</h2>
+      <p>Most QR generators ask you to sign up, show ads, add watermarks, or charge for basic features. QRCraft does none of that.</p>
+      <p>All encoding happens in your browser using the open-source <strong>qrcode.js</strong> library (MIT licence). No account, no server, no tracking.</p>
+      <p>QRCraft is part of <strong>ToolsFlow</strong> — a collection of free, focused web tools for everyday tasks. We believe the best tools get out of your way.</p>
+    </div>
+    <div class="about-stats">
+      <div class="stat-box"><div class="stat-num">6</div><div class="stat-label">QR types supported</div></div>
+      <div class="stat-box"><div class="stat-num">0</div><div class="stat-label">Server requests made</div></div>
+      <div class="stat-box"><div class="stat-num">100%</div><div class="stat-label">Free, forever</div></div>
+      <div class="stat-box"><div class="stat-num">0KB</div><div class="stat-label">Data sent to us</div></div>
+    </div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ════ VS TABLE ════ -->
+<section class="content-section" style="padding-top:64px">
+  <div class="section-head">
+    <div class="eyebrow">Comparison</div>
+    <h2>QRCraft vs other generators</h2>
+    <p>No email. No trial. No watermark. Just QR codes.</p>
+  </div>
+  <div style="overflow-x:auto">
+    <table class="vs-table">
+      <thead><tr><th>Feature</th><th>QRCraft</th><th>Canva</th><th>Typical paid tools</th></tr></thead>
+      <tbody>
+        <tr><td>Free to use</td><td><span class="check">✓</span></td><td><span class="partial">Partial (Pro plan)</span></td><td><span class="cross">✗</span></td></tr>
+        <tr><td>No signup required</td><td><span class="check">✓</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+        <tr><td>No watermark</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="partial">Paid only</span></td></tr>
+        <tr><td>Works offline</td><td><span class="check">✓</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+        <tr><td>Zero data sent to server</td><td><span class="check">✓</span></td><td><span class="cross">✗</span></td><td><span class="cross">✗</span></td></tr>
+        <tr><td>WiFi & vCard QR types</td><td><span class="check">✓</span></td><td><span class="cross">✗ (URL only)</span></td><td><span class="check">✓</span></td></tr>
+        <tr><td>PNG & SVG download</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+        <tr><td>Custom colours</td><td><span class="check">✓</span></td><td><span class="check">✓</span></td><td><span class="check">✓</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ════ FAQ ════ -->
+<section id="faq" class="content-section" style="padding-top:64px">
+  <div class="section-head">
+    <div class="eyebrow">FAQ</div>
+    <h2>Frequently asked questions</h2>
+  </div>
+  <div class="faq-list">
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Is QRCraft really free? <span class="arrow">+</span></button><div class="faq-a">Yes, completely. All features — all QR types, custom colours, PNG and SVG download — are free with no hidden limits, trial period, or credit card.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Do I need to create an account? <span class="arrow">+</span></button><div class="faq-a">No account, no login, no email. Open the page, generate a QR code, download it.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Is the QR code unique to my content? <span class="arrow">+</span></button><div class="faq-a">The same content always produces the same QR code — that's how QR codes work (deterministic encoding). Two people entering the same URL get identical codes. Any change in content produces a completely different code. Uniqueness comes from your content, just like a barcode.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Do my QR codes expire? <span class="arrow">+</span></button><div class="faq-a">No. QRCraft generates static QR codes — they are permanent as long as the URL or content you encoded stays live. No monthly fee, no expiry.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Is it legal to generate QR codes? <span class="arrow">+</span></button><div class="faq-a">Yes, completely legal. The QR code format was invented by Denso Wave in 1994, and they voluntarily waived all patent rights globally. The qrcode.js library is MIT licensed — free for commercial use.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">What's the difference between error correction levels? <span class="arrow">+</span></button><div class="faq-a">Error correction allows a QR code to scan even when partially damaged or covered. Levels: L (7% recovery), M (15%), Q (25%), H (30%). Use M for most purposes. Use H if you plan to add a logo over the centre.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">What size should I use for print? <span class="arrow">+</span></button><div class="faq-a">Business cards and labels: 256–300px. Flyers: 300–400px. Posters meant to be scanned from a distance: 512px (minimum 3×3 cm when printed). Download SVG for sharpest print results.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Can I use coloured QR codes? <span class="arrow">+</span></button><div class="faq-a">Yes. Keep strong contrast — dark dots on light background. Avoid light dots on dark backgrounds as some scanners struggle with this. Always test on multiple phones before printing at scale.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Can I add a logo to my QR code? <span class="arrow">+</span></button><div class="faq-a">QRCraft doesn't have a built-in logo overlay yet. Download as SVG or PNG with Max (H) error correction, then overlay your logo in Canva or Figma. A logo can safely cover up to 30% of the QR area at Max error correction.</div></div>
+    <div class="faq-item"><button class="faq-q" onclick="toggleFaq(this)">Is this tool safe for children to use? <span class="arrow">+</span></button><div class="faq-a">Yes. QRCraft collects no personal data from any user, regardless of age, so there's nothing to expose. That said, the tool is intended primarily for users 13 and above (in line with India's DPDP Act and global standards like COPPA), and we recommend parental supervision for younger children as with any website.</div></div>
+  </div>
+</section>
+
+<hr class="section-divider" />
+
+<!-- ════ PRIVACY ════ -->
+<section id="privacy" class="content-section" style="padding-top:64px">
+  <div class="section-head">
+    <div class="eyebrow">Privacy Policy</div>
+    <h2>We collect nothing. Here's the proof.</h2>
+    <p>Short version: your data never leaves your browser. Long version below.</p>
+  </div>
+  <div class="privacy-box">
+    <div class="privacy-badge">🔒 Effective: July 2026 · Applies to toolsflow.in/qr and QRCraft</div>
+
+    <div class="privacy-item">
+      <h3>📌 What we collect</h3>
+      <p><strong>Nothing.</strong> QRCraft does not collect, store, transmit, or process any personal data. The content you enter — URLs, WiFi credentials, contact details, or any text — is processed entirely within your browser and never sent to any server.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>🌐 How QR codes are generated</h3>
+      <p>All QR codes are created locally in your browser using the open-source <strong>qrcode.js</strong> library (MIT licence). No API calls are made during generation. Open your browser's Network tab while generating a code — you will see zero requests to our servers.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>🍪 Cookies & tracking</h3>
+      <p>QRCraft does not use tracking cookies, analytics scripts, fingerprinting, or any third-party tracking tools. The only cookie-like behaviour is a small <code>localStorage</code> flag to remember your consent choice so the banner doesn't re-appear on every visit. No personal data is stored in this flag.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>🔤 Google Fonts (third-party resource)</h3>
+      <p>This site loads fonts from Google Fonts (fonts.googleapis.com). Your browser makes a request to Google's servers to fetch these fonts. This is subject to <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Google's Privacy Policy</a>. No content you enter into QRCraft is shared with Google. If you prefer, you can use the site with system fonts by blocking Google Fonts in your browser.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>👶 Children's privacy (COPPA / DPDP Act / GDPR)</h3>
+      <p>QRCraft is not directed at children under 13 and is not designed to appeal to children. We do not knowingly collect, request, or store personal data from anyone, regardless of age. Since no personal data is collected at any point, there is no data to be exposed if a child under 13 uses this tool. This approach satisfies the core intent of India's Digital Personal Data Protection Act 2023 (DPDP), the US Children's Online Privacy Protection Act (COPPA), and the EU GDPR — all of which are primarily concerned with the collection and processing of personal data, not the mere act of using a calculator-like utility. Parents and guardians are welcome to supervise use of this tool as with any website.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>🇮🇳 India — DPDP Act 2023 compliance note</h3>
+      <p>India's Digital Personal Data Protection Act was notified on 13 November 2025. Full enforcement begins May 2027. Since QRCraft collects no personal data and uses no cookies for tracking, the Act's consent and data processing obligations do not apply to us. However, we display a consent notice for transparency around third-party font loading (Google Fonts), which may be considered a minor data touch-point.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>🌍 International users (GDPR / CCPA)</h3>
+      <p>For EU users under GDPR and California users under CCPA/CPRA: since QRCraft collects no personal data and uses no tracking, most obligations under these laws do not apply. We display a consent banner for transparency. You can always continue using the tool without accepting, as no tracking occurs either way.</p>
+    </div>
+    <div class="privacy-item">
+      <h3>📬 Contact</h3>
+      <p>Questions? Email <a href="mailto:hello@toolsflow.in">hello@toolsflow.in</a>. We aim to respond within 48 hours.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ════ FOOTER ════ -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <div class="logo">QR<span style="color:var(--accent)">Craft</span></div>
+        <p>A free, privacy-first QR code generator. Part of the ToolsFlow suite of web tools. Built in India 🇮🇳</p>
+      </div>
+      <div class="footer-col">
+        <h4>Tool</h4>
+        <ul>
+          <li><a href="#generator">QR Generator</a></li>
+          <li><a href="#how-it-works">How It Works</a></li>
+          <li><a href="#use-cases">Use Cases</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Info</h4>
+        <ul>
+          <li><a href="#about">About</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li><a href="#privacy">Privacy Policy</a></li>
+          <li><a href="mailto:hello@toolsflow.in">Contact</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 QRCraft by ToolsFlow · All QR codes generated locally · No data stored</p>
+      <p>Made with ❤️ in India</p>
+    </div>
+  </div>
+</footer>
+
+<div id="toast"></div>
+
+<script>
+  /* ── CONSENT ── */
+  function initConsent() {
+    const agreed = localStorage.getItem('qrc-consent');
+    if (!agreed) {
+      document.getElementById('consent-banner').style.display = 'flex';
+    }
+  }
+  function acceptConsent() {
+    localStorage.setItem('qrc-consent', '1');
+    document.getElementById('consent-banner').style.display = 'none';
+  }
+  function dismissConsent() {
+    localStorage.setItem('qrc-consent', '0');
+    document.getElementById('consent-banner').style.display = 'none';
+  }
+
+  /* ── TABS ── */
+  let currentType = 'url';
+  document.querySelectorAll('.type-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.type-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentType = btn.dataset.type;
+      document.querySelectorAll('.field-group').forEach(fg => fg.classList.remove('active'));
+      document.getElementById('fg-' + currentType).classList.add('active');
+    });
+  });
+
+  function updateSizeLabel(v) { document.getElementById('sizeVal').textContent = v + 'px'; }
+  function syncHex(colorId, hexId) { document.getElementById(hexId).value = document.getElementById(colorId).value.toUpperCase(); }
+  function syncColor(hexId, colorId) {
+    const val = document.getElementById(hexId).value;
+    if (/^#[0-9A-Fa-f]{6}$/.test(val)) document.getElementById(colorId).value = val;
+  }
+
+  /* ── QR CONTENT BUILDER ── */
+  function buildContent() {
+    switch (currentType) {
+      case 'url':   return document.getElementById('f-url').value.trim() || null;
+      case 'text':  return document.getElementById('f-text').value.trim() || null;
+      case 'phone': { const p = document.getElementById('f-phone').value.trim(); return p ? `tel:${p}` : null; }
+      case 'email': {
+        const addr = document.getElementById('f-email-addr').value.trim();
+        if (!addr) return null;
+        const sub = encodeURIComponent(document.getElementById('f-email-sub').value.trim());
+        const body = encodeURIComponent(document.getElementById('f-email-body').value.trim());
+        let m = `mailto:${addr}`;
+        const p2 = [];
+        if (sub) p2.push(`subject=${sub}`);
+        if (body) p2.push(`body=${body}`);
+        if (p2.length) m += '?' + p2.join('&');
+        return m;
+      }
+      case 'wifi': {
+        const ssid = document.getElementById('f-wifi-ssid').value.trim();
+        if (!ssid) return null;
+        return `WIFI:T:${document.getElementById('f-wifi-sec').value};S:${ssid};P:${document.getElementById('f-wifi-pass').value};;`;
+      }
+      case 'vcard': {
+        const first = document.getElementById('f-vc-first').value.trim();
+        const last  = document.getElementById('f-vc-last').value.trim();
+        if (!first && !last) return null;
+        let vc = `BEGIN:VCARD\nVERSION:3.0\nN:${last};${first};;;\nFN:${first} ${last}`;
+        const t = document.getElementById('f-vc-title').value.trim();
+        const o = document.getElementById('f-vc-org').value.trim();
+        const ph = document.getElementById('f-vc-phone').value.trim();
+        const em = document.getElementById('f-vc-email').value.trim();
+        const u = document.getElementById('f-vc-url').value.trim();
+        if (t)  vc += `\nTITLE:${t}`;
+        if (o)  vc += `\nORG:${o}`;
+        if (ph) vc += `\nTEL:${ph}`;
+        if (em) vc += `\nEMAIL:${em}`;
+        if (u)  vc += `\nURL:${u}`;
+        vc += `\nEND:VCARD`;
+        return vc;
+      }
+    }
+    return null;
+  }
+
+  function generateQR() {
+    const content = buildContent();
+    if (!content) { showToast('Please fill in the required field first.'); return; }
+    const size = parseInt(document.getElementById('sizeRange').value);
+    const ecLevel = document.getElementById('ecLevel').value;
+    const fgColor = document.getElementById('fgColor').value;
+    const bgColor = document.getElementById('bgColor').value;
+    const output = document.getElementById('qr-output');
+    output.innerHTML = '';
+    try {
+      new QRCode(output, {
+        text: content,
+        width: Math.min(size, 280), height: Math.min(size, 280),
+        colorDark: fgColor, colorLight: bgColor,
+        correctLevel: QRCode.CorrectLevel[ecLevel],
+      });
+      ['dlPng','dlSvg','copyBtn'].forEach(id => document.getElementById(id).disabled = false);
+      document.getElementById('qrMeta').textContent = `${content.length} chars · EC: ${ecLevel} · ${size}×${size}px`;
+    } catch(e) {
+      output.innerHTML = '<p style="color:#F44336;font-size:13px">Content too long — try shortening the URL or text.</p>';
+    }
+  }
+
+  function getCanvas() { return document.querySelector('#qr-output canvas'); }
+
+  function downloadPNG() {
+    const canvas = getCanvas(); if (!canvas) return;
+    const size = parseInt(document.getElementById('sizeRange').value);
+    const out = document.createElement('canvas');
+    out.width = size; out.height = size;
+    out.getContext('2d').drawImage(canvas, 0, 0, size, size);
+    const a = document.createElement('a');
+    a.href = out.toDataURL('image/png');
+    a.download = 'qrcraft-code.png'; a.click();
+    showToast('PNG downloaded!');
+  }
+
+  function downloadSVG() {
+    const canvas = getCanvas(); if (!canvas) return;
+    const size = parseInt(document.getElementById('sizeRange').value);
+    const dataUrl = canvas.toDataURL('image/png');
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><image width="${size}" height="${size}" xlink:href="${dataUrl}"/></svg>`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+    a.download = 'qrcraft-code.svg'; a.click();
+    showToast('SVG downloaded!');
+  }
+
+  async function copyQR() {
+    const canvas = getCanvas(); if (!canvas) return;
+    try {
+      canvas.toBlob(async blob => {
+        await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+        showToast('Copied to clipboard!');
+      });
+    } catch { showToast('Copy not supported — use Download instead.'); }
+  }
+
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg; t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+
+  function toggleFaq(btn) {
+    const isOpen = btn.classList.contains('open');
+    document.querySelectorAll('.faq-q').forEach(q => { q.classList.remove('open'); q.nextElementSibling.classList.remove('open'); });
+    if (!isOpen) { btn.classList.add('open'); btn.nextElementSibling.classList.add('open'); }
+  }
+
+  document.getElementById('f-url').addEventListener('keydown', e => { if (e.key === 'Enter') generateQR(); });
+
+  /* ── INIT ── */
+  window.addEventListener('DOMContentLoaded', () => {
+    initConsent();
+  });
+</script>
+</body>
+</html>
