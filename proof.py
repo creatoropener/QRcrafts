@@ -25,6 +25,7 @@ from typing import Any
 from runtimes import RuntimeAdapter, RuntimeDetectionError, detect_runtime
 
 SCHEMA_VERSION = "0.5"
+APP_VERSION = "0.5.2"
 SANDBOX_BASE_URL = "https://api.tokenfactory.nebius.com/sandboxes/"
 INFERENCE_BASE_URL = "https://api.tokenfactory.nebius.com/v1/"
 REPORT_JSON = "proof.json"
@@ -49,6 +50,10 @@ EXCLUDED_DIRS = {".git", ".pytest_cache", ".ruff_cache", "__pycache__", ".venv",
 
 class PatchProofError(RuntimeError):
     """A verification requirement was not satisfied."""
+
+
+class InferenceError(PatchProofError):
+    """An inference request stopped or exhausted its bounded retry budget."""
 
 
 @dataclass(frozen=True)
@@ -162,29 +167,105 @@ def collect_repository_context(
 
 def extract_json_object(raw: str) -> dict[str, Any]:
     text = raw.strip()
+    while text.startswith("<think>"):
+        _, separator, final = text.partition("</think>")
+        if not separator:
+            raise PatchProofError("Model returned incomplete reasoning without a final answer.")
+        text = final.strip()
     fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)
     if fenced:
         text = fenced.group(1)
 
     decoder = json.JSONDecoder()
-    for index, character in enumerate(text):
-        if character != "{":
-            continue
+    index = text.find("{")
+    if index >= 0:
         try:
             value, _ = decoder.raw_decode(text[index:])
         except json.JSONDecodeError:
-            continue
-        if isinstance(value, dict):
+            pass
+        else:
             return value
     raise PatchProofError("Model response did not contain a valid JSON object.")
+
+
+def _message_text(message: Any) -> str:
+    """Extract text from OpenAI-compatible string or multipart content."""
+    content = getattr(message, "content", None)
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") in ("text", "output_text") and isinstance(part.get("text"), str):
+                parts.append(part["text"])
+            elif getattr(part, "type", None) in ("text", "output_text") and isinstance(getattr(part, "text", None), str):
+                parts.append(part.text)
+        return "".join(parts)
+    return ""
+
+
+def _empty_response_details(response: Any) -> str:
+    choice = response.choices[0] if getattr(response, "choices", None) else None
+    message = getattr(choice, "message", None)
+    finish_reason = getattr(choice, "finish_reason", None)
+    # Provider fields can contain arbitrary text. Only emit allowlisted metadata.
+    if finish_reason not in ("stop", "length", "content_filter", "tool_calls", "function_call"):
+        finish_reason = "unknown"
+    refusal = getattr(message, "refusal", None)
+    reasoning = getattr(message, "reasoning_content", None)
+    usage = getattr(response, "usage", None)
+    completion_tokens = getattr(usage, "completion_tokens", None)
+    details = [f"finish_reason={finish_reason}"]
+    if isinstance(completion_tokens, int) and not isinstance(completion_tokens, bool):
+        details.append(f"completion_tokens={completion_tokens}")
+    if isinstance(reasoning, str):
+        details.append(f"reasoning_chars={len(reasoning)}")
+    if refusal:
+        details.append("refusal=yes")
+    if choice is None:
+        details.append("choices=0")
+    return ", ".join(details)
+
+
+def _has_refusal(message: Any) -> bool:
+    if getattr(message, "refusal", None):
+        return True
+    content = getattr(message, "content", None)
+    return isinstance(content, list) and any(
+        (part.get("type") if isinstance(part, dict) else getattr(part, "type", None)) == "refusal"
+        for part in content
+    )
+
+
+def _format_is_unsupported(error: Any) -> bool:
+    """Only change request format on an explicit unsupported-format error."""
+    if getattr(error, "status_code", None) not in (400, 422):
+        return False
+    body = getattr(error, "body", None)
+    if not isinstance(body, dict):
+        return False
+    body = body.get("error", body)
+    if not isinstance(body, dict):
+        return False
+    message = str(body.get("message", "")).lower()
+    param = body.get("param")
+    mentions_format = param == "response_format" or "response_format" in message or "json mode" in message
+    unsupported = body.get("code") in {"unsupported_parameter", "unsupported_value"} or any(
+        phrase in message for phrase in ("not supported", "unsupported", "does not support", "not available")
+    )
+    return mentions_format and unsupported
 
 
 def model_json(
     *, api_key: str, model: str, system: str, user: str, temperature: float
 ) -> dict[str, Any]:
-    from openai import OpenAI
-
-    client = OpenAI(api_key=api_key, base_url=INFERENCE_BASE_URL, timeout=120.0)
+    try:
+        max_tokens = int(os.environ.get("NEBIUS_MAX_TOKENS", "12000"))
+    except ValueError as error:
+        raise InferenceError("NEBIUS_MAX_TOKENS must be an integer.") from error
+    if not 1_000 <= max_tokens <= 32_000:
+        raise InferenceError("NEBIUS_MAX_TOKENS must be between 1000 and 32000.")
+    from openai import APIConnectionError, APIStatusError, OpenAI
     request: dict[str, Any] = {
         "model": model,
         "messages": [
@@ -192,24 +273,73 @@ def model_json(
             {"role": "user", "content": user},
         ],
         "temperature": temperature,
-        "max_tokens": 6_000,
+        "max_tokens": max_tokens,
     }
-    try:
-        response = client.chat.completions.create(
-            **request, response_format={"type": "json_object"}
-        )
-    except Exception as structured_error:  # noqa: BLE001 - provider fallback boundary
-        print(
-            f"Structured output was unavailable ({type(structured_error).__name__}); "
-            "retrying with strict JSON instructions.",
-            file=sys.stderr,
-        )
-        response = client.chat.completions.create(**request)
-
-    content = response.choices[0].message.content
-    if not isinstance(content, str) or not content.strip():
-        raise PatchProofError("Model returned an empty response.")
-    return extract_json_object(content)
+    structured = True
+    last_failure = "No usable model response."
+    # One retry owner: at most three HTTP requests per model_json call, including
+    # format fallback. Outer generation loops must not retry InferenceError.
+    with OpenAI(api_key=api_key, base_url=INFERENCE_BASE_URL,
+                timeout=120.0, max_retries=0) as client:
+        for attempt in range(3):
+            options = {"response_format": {"type": "json_object"}} if structured else {}
+            try:
+                response = client.chat.completions.create(**request, **options)
+            except APIStatusError as error:
+                status = error.status_code
+                last_failure = f"Inference HTTP {status}."
+                if structured and _format_is_unsupported(error):
+                    structured = False
+                    last_failure += " Structured output is unsupported; switching to plain JSON instructions."
+                elif status in {408, 409, 429, 500, 502, 503, 504}:
+                    # Retry the same request; a transport/server failure says
+                    # nothing about the model's structured-output capability.
+                    pass
+                else:
+                    hints = {
+                        401: "Check NEBIUS_API_KEY authentication.",
+                        403: "Check inference permissions for this key and model.",
+                        404: "Check NEBIUS_MODEL and the inference endpoint.",
+                        400: "Check the model's parameter, context, and output-token limits.",
+                        422: "Check parameters supported by the selected model.",
+                    }
+                    raise InferenceError(last_failure + " " + hints.get(status, "Request rejected.")) from None
+            except APIConnectionError:
+                last_failure = "Inference connection or timeout failure."
+            else:
+                choices = getattr(response, "choices", None)
+                choice = choices[0] if choices else None
+                message = getattr(choice, "message", None)
+                reason = getattr(choice, "finish_reason", None)
+                details = _empty_response_details(response)
+                if _has_refusal(message) or reason == "content_filter":
+                    raise InferenceError(f"Model declined the request ({details}); no automatic fallback.")
+                if reason == "length":
+                    raise InferenceError(
+                        f"Model reached its completion limit ({details}); final JSON is not accepted. "
+                        "Review NEBIUS_MAX_TOKENS against the model's output/context limits. "
+                        "The configured budget is not increased automatically."
+                    )
+                if reason not in ("stop", None):
+                    raise InferenceError(f"Unexpected model completion ({details}); a final text answer is required.")
+                content = _message_text(message)
+                last_failure = f"Model returned no final content ({details})."
+                if content.strip():
+                    try:
+                        return extract_json_object(content)
+                    except PatchProofError:
+                        last_failure = f"Model returned invalid final JSON ({details})."
+                if structured:
+                    structured = False
+                    last_failure += " Switching to plain JSON instructions."
+                else:
+                    # A plain response that is still empty/invalid is not fixed
+                    # by another identical generation request.
+                    raise InferenceError(last_failure)
+            if attempt < 2:
+                print(f"{last_failure} Retrying ({attempt + 2}/3).", file=sys.stderr)
+                time.sleep(0.5 * (2 ** attempt))
+    raise InferenceError(f"{last_failure} Inference stopped after 3 requests.")
 
 
 def generate_regression_test(
@@ -587,7 +717,7 @@ def render_report(proof: dict[str, Any]) -> str:
         [
             "",
             "---",
-            f"Generated by **Shadow Engineer / PatchProof v{SCHEMA_VERSION}**. Human merge approval is required.",
+            f"Generated by **Shadow Engineer / PatchProof v{APP_VERSION}**. Human merge approval is required.",
             "",
         ]
     )
@@ -660,6 +790,8 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                 test_path=test_path,
             )
             break
+        except InferenceError:
+            raise
         except Exception as error:  # noqa: BLE001 - bounded model retry
             regression_error = error
             if regression_attempt == 1:
@@ -765,6 +897,8 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         )
                         candidate_record["generation_attempts"] = generation_attempt
                         break
+                    except InferenceError:
+                        raise
                     except Exception as error:  # noqa: BLE001 - bounded model retry
                         generation_error = error
                         if generation_attempt == 1:
@@ -816,6 +950,8 @@ def execute(root: Path, issue: Issue, proof: dict[str, Any]) -> dict[str, Any]:
                         time.monotonic() - started,
                     )
                     passing.append((score, candidate_record, changes))
+            except InferenceError:
+                raise
             except Exception as candidate_error:  # noqa: BLE001 - isolate a failed candidate
                 candidate_record["error"] = str(candidate_error)
             candidate_record["duration_seconds"] = round(time.monotonic() - started, 3)
@@ -902,6 +1038,7 @@ def main(argv: list[str] | None = None) -> int:
     issue: Issue | None = None
     proof: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
+        "app_version": APP_VERSION,
         "verdict": "rejected",
         "candidates": [],
     }
