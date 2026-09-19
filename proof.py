@@ -439,6 +439,7 @@ Markdown fences."""
         rationale = "Regression test generated from the issue specification."
     try:
         adapter.validate_generated_test(test_content, test_path)
+        test_content = adapter.test_preamble + test_content
     except (SyntaxError, ValueError) as error:
         raise PatchProofError(
             f"Verifier returned an invalid regression test: {error}"
