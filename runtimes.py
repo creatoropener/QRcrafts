@@ -19,6 +19,7 @@ class RuntimeAdapter:
     display_name: str
     application_languages: tuple[str, ...]
     test_runtime: str
+    test_preamble: str = ""
     source_extensions: frozenset[str]
     context_extensions: frozenset[str]
     context_names: frozenset[str]
@@ -358,24 +359,41 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             context_extensions=frozenset({".html", ".css", ".js", ".mjs", ".cjs"}),
             context_names=frozenset(),
             test_suffix=".test.mjs",
-            baseline_command=f"node /patchproof/static_web_check.mjs {entry}",
+            baseline_command="node /patchproof/static_web_check.mjs index.html",
             bootstrap_command="true",
-            preflight_command="node --version && node -e \"require('/opt/patchproof/node/node_modules/jsdom')\"",
-            verifier_guidance=(
-                "Return one offline node:test regression for this static web app. Use the "
-                "real DOM via preinstalled jsdom, loaded with EXACTLY this pattern and no "
-                "other import or require of jsdom:\n"
+            preflight_command="node --version",
+            test_preamble=(
                 "import { createRequire } from 'node:module';\n"
+                "import fs from 'node:fs';\n"
+                "\n"
                 "const require = createRequire('/opt/patchproof/node/package.json');\n"
                 "const { JSDOM } = require('jsdom');\n"
-                "Do not also write `import { JSDOM } from 'jsdom'` anywhere in the file — "
-                "jsdom must be loaded only through the createRequire pattern above. "
-                "Load the actual HTML from disk and exercise its functions/events. Use "
-                "runScripts: 'outside-only' and window.eval for relevant actual inline "
-                "scripts. Do not enable external resources, network access, install "
-                "packages, or reproduce the application algorithm in the test. jsdom is "
-                "not a real browser: layout/canvas/visual behavior requires Playwright."
+                "\n"
+                "const html = fs.readFileSync('index.html', 'utf8');\n"
+                "const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/' });\n"
+                "const { window } = dom;\n"
+                "const { document } = window;\n"
+                "\n"
+                "for (const match of html.matchAll(/<script(?:\\s[^>]*)?>([\\s\\S]*?)<\\/script>/gi)) {\n"
+                "  const body = match[1];\n"
+                "  if (body.trim()) window.eval(body);\n"
+                "}\n"
             ),
+            verifier_guidance=(
+                "Return one offline node:test regression for this static web app. "
+                "A working DOM is already set up for you as `document` and `window` "
+                "(the real app's index.html, loaded via jsdom, with its inline scripts "
+                "already executed) — do NOT import, require, or construct jsdom "
+                "yourself, and do NOT redeclare `document`, `window`, `dom`, `fs`, or "
+                "`require`; they already exist. Just write the test using node:test "
+                "and node:assert against the existing `document`/`window`. Exercise "
+                "the real functions/events on the page (e.g., dispatch click events, "
+                "set input .value, call an existing global function). Do not enable "
+                "external resources, network access, or install packages, and do not "
+                "reproduce the application algorithm in the test. jsdom is not a real "
+                "browser: layout/canvas/visual behavior requires Playwright."
+            ),
+        )
             solver_guidance=(
                 "Repair existing HTML, CSS, or inline/external JavaScript only. Preserve "
                 "the single-page app structure and unrelated UI behavior."
