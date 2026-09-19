@@ -19,7 +19,6 @@ class RuntimeAdapter:
     display_name: str
     application_languages: tuple[str, ...]
     test_runtime: str
-    test_preamble: str = ""
     source_extensions: frozenset[str]
     context_extensions: frozenset[str]
     context_names: frozenset[str]
@@ -31,6 +30,7 @@ class RuntimeAdapter:
     solver_guidance: str
     test_directory: str = ""
     tool_command: str = ""
+    test_preamble: str = ""
 
     def test_path(self, issue_number: int) -> str:
         identifier = str(issue_number) if issue_number else "manual"
