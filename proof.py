@@ -281,7 +281,7 @@ def model_json(
     # One retry owner: at most three HTTP requests per model_json call, including
     # format fallback. Outer generation loops must not retry InferenceError.
     with OpenAI(api_key=api_key, base_url=INFERENCE_BASE_URL,
-                timeout=120.0, max_retries=0) as client:
+                timeout=300.0, max_retries=0) as client:
         for attempt in range(3):
             options = {"response_format": {"type": "json_object"}} if structured else {}
             try:
