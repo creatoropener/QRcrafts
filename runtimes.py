@@ -393,7 +393,6 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
                 "reproduce the application algorithm in the test. jsdom is not a real "
                 "browser: layout/canvas/visual behavior requires Playwright."
             ),
-        )
             solver_guidance=(
                 "Repair existing HTML, CSS, or inline/external JavaScript only. Preserve "
                 "the single-page app structure and unrelated UI behavior."
