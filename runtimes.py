@@ -362,13 +362,19 @@ def _detect_script_runtime(root: Path, requested: str | None = None) -> RuntimeA
             bootstrap_command="true",
             preflight_command="node --version && node -e \"require('/opt/patchproof/node/node_modules/jsdom')\"",
             verifier_guidance=(
-                "Return one offline node:test regression for this static web app. Use "
-                "the real DOM via preinstalled jsdom: import {createRequire} from 'node:module'; "
-                "const {JSDOM} = createRequire('/opt/patchproof/node/package.json')('jsdom'); "
-                "Load the actual HTML from disk and exercise its functions/events. Use runScripts: 'outside-only' "
-                "and window.eval for relevant actual inline scripts. Do not enable external resources, "
-                "network access, install packages, or reproduce the application algorithm in the test. "
-                "jsdom is not a real browser: layout/canvas/visual behavior requires Playwright."
+                "Return one offline node:test regression for this static web app. Use the "
+                "real DOM via preinstalled jsdom, loaded with EXACTLY this pattern and no "
+                "other import or require of jsdom:\n"
+                "import { createRequire } from 'node:module';\n"
+                "const require = createRequire('/opt/patchproof/node/package.json');\n"
+                "const { JSDOM } = require('jsdom');\n"
+                "Do not also write `import { JSDOM } from 'jsdom'` anywhere in the file — "
+                "jsdom must be loaded only through the createRequire pattern above. "
+                "Load the actual HTML from disk and exercise its functions/events. Use "
+                "runScripts: 'outside-only' and window.eval for relevant actual inline "
+                "scripts. Do not enable external resources, network access, install "
+                "packages, or reproduce the application algorithm in the test. jsdom is "
+                "not a real browser: layout/canvas/visual behavior requires Playwright."
             ),
             solver_guidance=(
                 "Repair existing HTML, CSS, or inline/external JavaScript only. Preserve "
