@@ -1,0 +1,39 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #F7F6F2;
+  --surface: #FFFFFF;
+  --ink: #1A1A1A;
+  --muted: #7A7A7A;
+  --accent: #0066FF;
+  --border: #E0DED8;
+  --radius: 12px;
+  --mono: 'Space Mono', monospace;
+  --sans: 'Space Grotesk', sans-serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--sans);
+  background-color: var(--bg);
+  color: var(--ink);
+  min-height: 100vh;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+[id] {
+  scroll-margin-top: 80px;
+}
+
+.font-sans-custom {
+  font-family: var(--sans);
+}
+
+.font-mono-custom {
+  font-family: var(--mono);
+}
+

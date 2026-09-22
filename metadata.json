@@ -1,0 +1,6 @@
+{
+  "name": "QRCraft - Free QR Code Generator",
+  "description": "Generate QR codes instantly for URLs, WiFi, email, phone, vCard and text. Free forever, no signup, no watermark. Download as PNG or SVG.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
