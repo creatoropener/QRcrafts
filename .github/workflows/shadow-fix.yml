@@ -19,11 +19,14 @@ jobs:
       issues: write
 
     env:
+      # Keep Python imports on the Actions runner from creating PR artifacts.
+      PYTHONDONTWRITEBYTECODE: '1'
       NEBIUS_PROJECT_ID: ${{ secrets.NEBIUS_PROJECT_ID }}
       NEBIUS_API_KEY: ${{ secrets.NEBIUS_API_KEY }}
       CONTREE_IMAGE: ${{ secrets.CONTREE_IMAGE }}
       CONTREE_IMAGE_PYTHON_PYTEST: ${{ secrets.CONTREE_IMAGE_PYTHON_PYTEST }}
       CONTREE_IMAGE_NODE_PACKAGE: ${{ secrets.CONTREE_IMAGE_NODE_PACKAGE }}
+      CONTREE_IMAGE_NODE_TYPESCRIPT: ${{ secrets.CONTREE_IMAGE_NODE_TYPESCRIPT }}
       CONTREE_IMAGE_STATIC_WEB: ${{ secrets.CONTREE_IMAGE_STATIC_WEB }}
       CONTREE_IMAGE_WEB_PLAYWRIGHT: ${{ secrets.CONTREE_IMAGE_WEB_PLAYWRIGHT }}
       CONTREE_IMAGE_JAVA_JUNIT: ${{ secrets.CONTREE_IMAGE_JAVA_JUNIT }}
@@ -32,7 +35,7 @@ jobs:
       CONTREE_IMAGE_GO: ${{ secrets.CONTREE_IMAGE_GO }}
       CONTREE_IMAGE_RUST: ${{ secrets.CONTREE_IMAGE_RUST }}
       NEBIUS_MODEL: ${{ vars.NEBIUS_MODEL || secrets.NEBIUS_MODEL }}
-      NEBIUS_MAX_TOKENS: ${{ vars.NEBIUS_MAX_TOKENS || '24000' }}
+      NEBIUS_MAX_TOKENS: ${{ vars.NEBIUS_MAX_TOKENS || '12000' }}
 
     steps:
       - name: Comment on issue
@@ -61,6 +64,16 @@ jobs:
       - name: Install PatchProof dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-patchproof.txt
 
+      - name: Check PatchProof imports and runtime selection
+        run: |
+          python - <<'PY'
+          import proof
+          from pathlib import Path
+          from runtimes import detect_runtime
+          adapter = detect_runtime(Path.cwd())
+          print(f"Runtime: {adapter.id}; baseline: {adapter.baseline_command}")
+          PY
+
       - name: Validate configuration
         shell: bash
         run: |
@@ -72,7 +85,8 @@ jobs:
             fi
           done
           if [[ -z "$CONTREE_IMAGE" && -z "$CONTREE_IMAGE_PYTHON_PYTEST" && \
-                -z "$CONTREE_IMAGE_NODE_PACKAGE" && -z "$CONTREE_IMAGE_STATIC_WEB" && \
+                -z "$CONTREE_IMAGE_NODE_PACKAGE" && -z "$CONTREE_IMAGE_NODE_TYPESCRIPT" && \
+                -z "$CONTREE_IMAGE_STATIC_WEB" && \
                 -z "$CONTREE_IMAGE_WEB_PLAYWRIGHT" && -z "$CONTREE_IMAGE_JAVA_JUNIT" && \
                 -z "$CONTREE_IMAGE_JAVA_MAVEN" && -z "$CONTREE_IMAGE_JAVA_GRADLE" && \
                 -z "$CONTREE_IMAGE_GO" && -z "$CONTREE_IMAGE_RUST" ]]; then
@@ -117,19 +131,19 @@ jobs:
           delete-branch: true
 
       - name: Comment with verified pull request
-        if: steps.patchproof.outcome == 'success'
+        if: steps.patchproof.outcome == 'success' && steps.create-pr.outcome == 'success' && steps.create-pr.outputs.pull-request-url != ''
+        continue-on-error: true
         uses: actions/github-script@v7
         env:
           PR_URL: ${{ steps.create-pr.outputs.pull-request-url }}
         with:
+          retries: 2
           script: |
-            const fs = require('fs');
-            const report = fs.readFileSync('verification-report.md', 'utf8');
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: `✅ **PatchProof verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\n${report}`
+              body: `✅ **PatchProof verified a repair.**\n\nPull request: ${process.env.PR_URL}\n\nThe verification report is in the pull request description and the Actions artifact. Human merge approval is required.`
             });
 
       - name: Comment when verification rejects all repairs
