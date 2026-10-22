@@ -30,7 +30,9 @@ export function buildContent(formData: QRFormData): string | null {
     case 'wifi': {
       const ssid = formData.wifi.ssid.trim();
       if (!ssid) return null;
-      return `WIFI:T:${formData.wifi.sec};S:${ssid};P:${formData.wifi.pass.trim()};;`;
+      const escapedSsid = ssid.replace(/([;,:,\\\"])/g, '\\$1');
+      const escapedPass = formData.wifi.pass.trim().replace(/([;,:,\\\"])/g, '\\$1');
+      return `WIFI:T:${formData.wifi.sec};S:${escapedSsid};P:${escapedPass};;`;
     }
 
     case 'vcard': {
